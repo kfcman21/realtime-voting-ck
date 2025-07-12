@@ -7,7 +7,9 @@
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-800 font-sans">
+
     <div class="container max-w-4xl mx-auto p-4 sm:p-6">
+        
         <header class="text-center mb-8">
             <h1 class="text-4xl font-extrabold text-white">🔑 투표 관리 시스템</h1>
         </header>
@@ -25,48 +27,90 @@
                     <h2 id="welcome-admin" class="text-2xl font-bold text-slate-700">✨ 주제 관리</h2>
                     <button onclick="adminLogout()" class="bg-red-500 text-white font-semibold py-2 px-4 rounded-md hover:bg-red-600">🚪 로그아웃</button>
                  </div>
-                 <div class="bg-green-50 p-4 rounded-lg border border-green-200 mb-6">...</div>
+                 
+                 <div class="bg-green-50 p-4 rounded-lg border border-green-200 mb-6">
+                    <h3 class="font-bold text-lg text-green-800 mb-2">새 주제 만들기</h3>
+                    <input type="text" id="new-topic-title" placeholder="주제 제목" class="w-full p-3 border border-gray-300 rounded-md mb-3">
+                    <input type="text" id="new-topic-items" placeholder="항목들을 쉼표(,)로 구분하여 입력" class="w-full p-3 border border-gray-300 rounded-md mb-4">
+                    <button onclick="createTopic()" class="w-full bg-green-600 text-white font-semibold py-3 px-6 rounded-md hover:bg-green-700 transition">주제 생성</button>
+                 </div>
+                 
                  <hr class="my-6">
-                 <div id="topics-list" class="space-y-4"></div>
+                 
+                 <h3 class="font-bold text-lg text-slate-700 mb-2">내 주제 목록</h3>
+                 <div id="topics-list" class="space-y-4">
+                     </div>
             </div>
         </div>
     </div>
-    <div id="edit-modal" class="hidden ...">...</div>
+
+    <div id="edit-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center">
+        <div class="relative mx-auto p-5 border w-full max-w-lg shadow-lg rounded-md bg-white">
+            <div class="mt-3 text-center">
+                <h3 class="text-lg leading-6 font-medium text-gray-900">✏️ 주제 수정</h3>
+                <div class="mt-2 px-7 py-3">
+                    <label for="edit-topic-title" class="text-left block text-sm font-medium text-gray-700">주제 제목</label>
+                    <input type="text" id="edit-topic-title" class="mt-1 w-full p-2 border border-gray-300 rounded-md">
+                    
+                    <label for="edit-topic-items" class="text-left block text-sm font-medium text-gray-700 mt-4">항목 (쉼표로 구분)</label>
+                    <input type="text" id="edit-topic-items" class="mt-1 w-full p-2 border border-gray-300 rounded-md">
+                    <p class="text-xs text-orange-500 mt-1">※ 항목 수정 시, 기존 투표는 모두 초기화됩니다.</p>
+                </div>
+                <div class="items-center px-4 py-3">
+                    <button id="save-edit-btn" class="px-4 py-2 bg-green-500 text-white text-base font-medium rounded-md w-auto hover:bg-green-600">
+                        변경사항 저장
+                    </button>
+                    <button id="cancel-edit-btn" onclick="closeEditModal()" class="ml-2 px-4 py-2 bg-gray-300 text-gray-800 text-base font-medium rounded-md w-auto hover:bg-gray-400">
+                        취소
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    
     <script>
         // Firebase 설정 붙여넣기
-        const firebaseConfig = { apiKey: "AIzaSyBg6oQzlAEUmKgfoc9wzW_WnRGzCD-NgzI",
-  authDomain: "realtime-voting-ck.firebaseapp.com",
-  projectId: "realtime-voting-ck",
-  storageBucket: "realtime-voting-ck.firebasestorage.app",
-  messagingSenderId: "920253088767",
-  appId: "1:920253088767:web:51d64912cd92fc18d05dca",
-  measurementId: "G-KZBYM1TCG5"
- };
+        const firebaseConfig = {
+             apiKey: "AIzaSyBg6oQzlAEUmKgfoc9wzW_WnRGzCD-NgzI",
+             authDomain: "realtime-voting-ck.firebaseapp.com",
+             projectId: "realtime-voting-ck",
+             storageBucket: "realtime-voting-ck.firebasestorage.app",
+             messagingSenderId: "920253088767",
+             appId: "1:920253088767:web:51d64912cd92fc18d05dca",
+             measurementId: "G-KZBYM1TCG5"
+
+        };
+        
+        // Firebase 서비스 초기화
         firebase.initializeApp(firebaseConfig);
         const auth = firebase.auth();
         const db = firebase.firestore();
         const topicsCollection = db.collection('topics');
-        let loggedInAdmin = null; // 로그인한 관리자 정보 저장
         
-        // 로그인 상태 감지
+        let loggedInAdmin = null; // 로그인한 관리자 정보 저장 변수
+        let currentTopics = [];   // 현재 관리자의 주제 목록 저장 변수
+        let unsubscribe;          // 실시간 리스너를 중지시키기 위한 변수
+
+        // --- 1. 인증 관련 핵심 기능 ---
+
+        // 현재 로그인 상태인지 항상 감시하는 파수꾼 함수
         auth.onAuthStateChanged(user => {
-            if (user) {
-                // 로그인 된 상태
+            if (user) { // 사용자가 로그인했다면
                 loggedInAdmin = user;
                 document.getElementById('login-form').classList.add('hidden');
                 document.getElementById('admin-panel').classList.remove('hidden');
                 document.getElementById('welcome-admin').innerText = `✨ ${user.email}님, 환영합니다.`;
-                startListenerForAdmin(user.uid);
-            } else {
-                // 로그아웃 된 상태
+                startListenerForAdmin(user.uid); // 해당 관리자의 주제만 불러오기 시작
+            } else { // 로그아웃했다면
                 loggedInAdmin = null;
                 document.getElementById('login-form').classList.remove('hidden');
                 document.getElementById('admin-panel').classList.add('hidden');
-                if (unsubscribe) unsubscribe();
+                if (unsubscribe) unsubscribe(); // 실시간 데이터 수신 중지
             }
         });
 
@@ -82,7 +126,21 @@
             auth.signOut();
         }
 
-        // 주제 생성 시 adminId(UID) 추가
+        // --- 2. 주제 관리 핵심 기능 ---
+
+        // 로그인한 관리자의 주제만 실시간으로 가져오는 함수
+        function startListenerForAdmin(adminId) {
+            if (unsubscribe) unsubscribe(); // 이전 리스너가 있다면 중지
+            
+            // ★★★ 핵심: topics 컬렉션에서 adminId가 로그인한 관리자의 uid와 같은 것만 필터링
+            unsubscribe = topicsCollection.where('adminId', '==', adminId).orderBy('createdAt', 'desc')
+                .onSnapshot(snapshot => {
+                    currentTopics = snapshot.docs.map(doc => ({ id: doc.id, data: doc.data() }));
+                    renderAdminList(currentTopics); // 화면에 목록 다시 그리기
+                });
+        }
+
+        // 새 주제 생성 (로그인한 관리자의 ID와 함께 저장)
         async function createTopic() {
             if (!loggedInAdmin) return alert('로그인이 필요합니다.');
             const title = document.getElementById('new-topic-title').value.trim();
@@ -93,7 +151,7 @@
             await topicsCollection.add({
                 title,
                 items,
-                adminId: loggedInAdmin.uid, // ★★★ 로그인한 관리자의 UID 저장
+                adminId: loggedInAdmin.uid, // ★★★ 로그인한 관리자의 UID를 저장
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                 archivedResults: []
             });
@@ -101,20 +159,90 @@
             document.getElementById('new-topic-items').value = '';
         }
 
-        let unsubscribe;
-        function startListenerForAdmin(adminId) {
-            if (unsubscribe) unsubscribe();
-            // ★★★ 로그인한 관리자의 주제만 필터링
-            unsubscribe = topicsCollection.where('adminId', '==', adminId).orderBy('createdAt', 'desc')
-                .onSnapshot(snapshot => {
-                    const topics = snapshot.docs.map(doc => ({ id: doc.id, data: doc.data() }));
-                    renderAdminList(topics);
-                });
+        // --- 3. 수정/삭제 등 부가 기능 ---
+        const editModal = document.getElementById('edit-modal');
+        const saveEditBtn = document.getElementById('save-edit-btn');
+
+        function openEditModal(topicId) {
+            const topic = currentTopics.find(t => t.id === topicId);
+            if (!topic) return;
+
+            document.getElementById('edit-topic-title').value = topic.data.title;
+            document.getElementById('edit-topic-items').value = topic.data.items.map(item => item.name).join(', ');
+            
+            saveEditBtn.replaceWith(saveEditBtn.cloneNode(true)); // 기존 이벤트 제거
+            document.getElementById('save-edit-btn').addEventListener('click', () => saveTopicChanges(topicId));
+
+            editModal.classList.remove('hidden');
+        }
+
+        function closeEditModal() {
+            editModal.classList.add('hidden');
+        }
+
+        async function saveTopicChanges(topicId) {
+            const newTitle = document.getElementById('edit-topic-title').value.trim();
+            const newItemsStr = document.getElementById('edit-topic-items').value.trim();
+
+            if (!newTitle || !newItemsStr) return alert('주제와 항목을 모두 입력해야 합니다.');
+
+            if (confirm('항목을 수정하면 기존 투표 결과가 모두 0으로 초기화됩니다. 계속하시겠습니까?')) {
+                const newItems = newItemsStr.split(',').map(name => ({ name: name.trim(), votes: 0 }));
+                await topicsCollection.doc(topicId).update({ title: newTitle, items: newItems });
+                alert('주제가 성공적으로 수정되었습니다.');
+                closeEditModal();
+            }
         }
         
-        // renderAdminList, openEditModal, saveTopicChanges, resetVotes, saveResults, deleteTopic 함수는
-        // 이전 '수정 기능 추가' 답변의 코드와 거의 동일하므로 생략합니다.
-        // (해당 코드 블록을 여기에 복사하여 사용)
+        async function resetVotes(topicId) {
+            if (!confirm('정말로 투표를 초기화하시겠습니까?')) return;
+            const items = currentTopics.find(t => t.id === topicId).data.items.map(item => ({ ...item, votes: 0 }));
+            await topicsCollection.doc(topicId).update({ items });
+            alert('투표가 초기화되었습니다.');
+        }
+
+        async function saveResults(topicId) {
+            if (!confirm('현재 투표 결과를 기록으로 저장하시겠습니까?')) return;
+            const topic = currentTopics.find(t => t.id === topicId);
+            const newArchive = { savedAt: new Date(), results: topic.data.items };
+            await topicsCollection.doc(topic.id).update({
+                archivedResults: firebase.firestore.FieldValue.arrayUnion(newArchive)
+            });
+            alert('결과가 저장되었습니다.');
+        }
+        
+        async function deleteTopic(topicId) {
+             if (!confirm('정말로 이 주제를 영구적으로 삭제하시겠습니까? 되돌릴 수 없습니다.')) return;
+             await topicsCollection.doc(topicId).delete();
+             alert('주제가 삭제되었습니다.');
+        }
+
+        // --- 4. 화면 렌더링 기능 ---
+        // DB에서 가져온 주제 목록을 HTML로 그려주는 함수
+        function renderAdminList(topics = []) {
+            const listEl = document.getElementById('topics-list');
+            listEl.innerHTML = ''; // 목록 비우기
+            topics.forEach(topic => {
+                const totalVotes = topic.data.items.reduce((sum, item) => sum + item.votes, 0);
+                const card = document.createElement('div');
+                card.className = "bg-white p-4 rounded-lg border";
+                card.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <div>
+                           <h4 class="font-bold text-lg">${topic.data.title}</h4>
+                           <p class="text-sm text-gray-500">${topic.data.items.length}개 항목 / 총 ${totalVotes}표</p>
+                        </div>
+                        <div class="flex flex-col sm:flex-row gap-2 flex-shrink-0 ml-2">
+                           <button onclick="openEditModal('${topic.id}')" class="text-xs bg-yellow-500 text-white font-bold py-1 px-2 rounded-md hover:bg-yellow-600">✏️ 수정</button>
+                           <button onclick="saveResults('${topic.id}')" class="text-xs bg-sky-500 text-white font-bold py-1 px-2 rounded-md hover:bg-sky-600">💾 저장</button>
+                           <button onclick="resetVotes('${topic.id}')" class="text-xs bg-orange-500 text-white font-bold py-1 px-2 rounded-md hover:bg-orange-600">🔄 초기화</button>
+                           <button onclick="deleteTopic('${topic.id}')" class="text-xs bg-red-600 text-white font-bold py-1 px-2 rounded-md hover:bg-red-700">❌ 삭제</button>
+                        </div>
+                    </div>
+                `;
+                listEl.appendChild(card);
+            });
+        }
     </script>
 </body>
 </html>
