@@ -7,14 +7,18 @@
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100 font-sans">
+
     <div class="container max-w-6xl mx-auto p-4 sm:p-6">
+        
         <header class="text-center mb-8">
             <h1 id="board-title" class="text-4xl font-extrabold text-slate-800">📊 실시간 공감 투표</h1>
             <p class="text-slate-500 mt-2">여러분의 생각을 투표로 보여주세요!</p>
         </header>
+
         <div id="topics-board" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             <p class="text-center text-gray-500 col-span-full">투표를 불러오는 중입니다...</p>
         </div>
+
         <footer class="text-center mt-12">
             <a href="index.html" class="text-sm text-gray-400 hover:text-gray-600 hover:underline transition">
                 &larr; 다른 게시판 보러가기
@@ -24,16 +28,20 @@
 
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+
     <script>
-        // Firebase 설정 붙여넣기
-        const firebaseConfig = { apiKey: "AIzaSyBg6oQzlAEUmKgfoc9wzW_WnRGzCD-NgzI",
-  authDomain: "realtime-voting-ck.firebaseapp.com",
-  projectId: "realtime-voting-ck",
-  storageBucket: "realtime-voting-ck.firebasestorage.app",
-  messagingSenderId: "920253088767",
-  appId: "1:920253088767:web:51d64912cd92fc18d05dca",
-  measurementId: "G-KZBYM1TCG5"
- };
+        // ▼▼▼▼▼ Firebase 프로젝트 설정 코드를 여기에 붙여넣으세요 ▼▼▼▼▼
+        const firebaseConfig = {
+            apiKey: "AIzaSy...YOUR_API_KEY",
+            authDomain: "your-project-id.firebaseapp.com",
+            projectId: "your-project-id",
+            storageBucket: "your-project-id.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "1:YOUR_APP_ID:web:abcdef123456"
+        };
+        // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+        // Firebase 초기화
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
         const topicsCollection = db.collection('topics');
@@ -53,52 +61,95 @@
                 }, console.error);
         }
 
-        // renderTopics, vote, getRankEmoji 함수는 이전 버전과 거의 동일 (코드 생략)
-        // (index.html 사용자 화면 코드에서 그대로 복사하여 사용)
-        function vote(topicId, itemIndex) { /* 이전과 동일 */ }
-        function getRankEmoji(rankIndex) { /* 이전과 동일 */ }
-        function renderTopics(topics = []) { /* 이전과 동일 */ }
-
-        // --- 생략된 함수 내용 (이전 답변의 index.html 코드에서 복사) ---
+        // --- 투표 기능 (LocalStorage 체크 로직 추가) ---
         function vote(topicId, itemIndex) {
+            // 1. 로컬 저장소에서 'voted_주제ID' 키가 있는지 확인
+            if (localStorage.getItem(`voted_${topicId}`)) {
+                alert('이미 이 주제에 투표하셨습니다.');
+                return; // 함수를 즉시 종료
+            }
+
             const topicRef = topicsCollection.doc(topicId);
             db.runTransaction(async (transaction) => {
                 const doc = await transaction.get(topicRef);
                 if (!doc.exists) throw "Document does not exist!";
+                
                 const items = doc.data().items;
                 items[itemIndex].votes += 1;
                 transaction.update(topicRef, { items });
+
+                // 2. 투표가 성공하면, 로컬 저장소에 'voted_주제ID' 키와 값을 저장
+                localStorage.setItem(`voted_${topicId}`, 'true');
             }).catch(console.error);
         }
+
+        // --- 순위 이모지 변환 함수 ---
         function getRankEmoji(rankIndex) {
             const emojis = ['🥇', '🥈', '🥉'];
             return emojis[rankIndex] || `<b>${rankIndex + 1}</b>`;
         }
+        
+        // --- 화면 렌더링 기능 (LocalStorage 체크 로직 추가) ---
         function renderTopics(topics = []) {
             const board = document.getElementById('topics-board');
-            board.innerHTML = '';
+            board.innerHTML = ''; 
+            
             if (topics.length === 0) {
                  board.innerHTML = `<p class="text-center text-gray-500 col-span-full">이 게시판에는 아직 등록된 투표가 없습니다.</p>`;
                  return;
             }
+
             topics.forEach(topic => {
                 const sortedItems = [...topic.data.items].sort((a, b) => b.votes - a.votes);
                 const totalVotes = topic.data.items.reduce((sum, i) => sum + i.votes, 0);
+                
+                // 3. 화면을 그리기 전, 로컬 저장소에서 투표 여부를 확인
+                const hasVoted = localStorage.getItem(`voted_${topic.id}`);
+
                 let itemsHtml = '<ul class="space-y-3 mt-4">';
                 sortedItems.forEach((item, index) => {
                     const percentage = totalVotes > 0 ? (item.votes / totalVotes * 100).toFixed(1) : 0;
-                    itemsHtml += `<li><div class="flex items-center justify-between text-sm font-medium text-slate-600 mb-1"><div class="flex items-center"><span class="text-xl w-8 text-center">${getRankEmoji(index)}</span><span>${item.name}</span></div><span class="font-bold">${item.votes}표 (${percentage}%)</span></div><div class="w-full bg-gray-200 rounded-full h-2.5"><div class="bg-blue-500 h-2.5 rounded-full" style="width: ${percentage}%"></div></div></li>`;
+                    itemsHtml += `
+                        <li>
+                            <div class="flex items-center justify-between text-sm font-medium text-slate-600 mb-1">
+                                <div class="flex items-center">
+                                    <span class="text-xl w-8 text-center">${getRankEmoji(index)}</span>
+                                    <span>${item.name}</span>
+                                </div>
+                                <span class="font-bold">${item.votes}표 (${percentage}%)</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2.5">
+                                <div class="bg-blue-500 h-2.5 rounded-full" style="width: ${percentage}%"></div>
+                            </div>
+                        </li>
+                    `;
                 });
                 itemsHtml += '</ul>';
-                let voteButtonsHtml = '<div class="flex flex-wrap gap-2 mt-5">';
-                topic.data.items.forEach((item, index) => {
-                    const originalIndex = topic.data.items.findIndex(orig => orig.name === item.name);
-                    voteButtonsHtml += `<button onclick="vote('${topic.id}', ${originalIndex})" class="flex-grow bg-slate-700 text-white text-sm font-semibold py-2 px-3 rounded-md hover:bg-slate-800 transition">🗳️ ${item.name}</button>`;
-                });
-                voteButtonsHtml += '</div>';
+
+                let voteButtonsHtml = '';
+                // 4. 투표 여부에 따라 다른 HTML을 보여줌
+                if (hasVoted) {
+                    // 투표를 이미 한 경우: '투표 완료' 메시지 표시
+                    voteButtonsHtml = `<div class="mt-5 p-3 bg-green-100 text-green-700 font-semibold text-center rounded-md">✅ 투표 완료</div>`;
+                } else {
+                    // 아직 투표하지 않은 경우: 투표 버튼들 표시
+                    voteButtonsHtml = '<div class="flex flex-wrap gap-2 mt-5">';
+                    topic.data.items.forEach((item) => {
+                        const originalIndex = topic.data.items.findIndex(orig => orig.name === item.name);
+                        voteButtonsHtml += `<button onclick="vote('${topic.id}', ${originalIndex})" class="flex-grow bg-slate-700 text-white text-sm font-semibold py-2 px-3 rounded-md hover:bg-slate-800 transition">🗳️ ${item.name}</button>`;
+                    });
+                    voteButtonsHtml += '</div>';
+                }
+                
                 const topicCard = document.createElement('div');
-                topicCard.className = 'bg-white rounded-xl shadow-md p-6 flex flex-col transition hover:shadow-lg hover:-translate-y-1';
-                topicCard.innerHTML = `<div class="flex-grow"><h3 class="text-xl font-bold text-slate-800">${topic.data.title}</h3>${itemsHtml}</div><div class="mt-4">${voteButtonsHtml}</div>`;
+                topicCard.className = 'bg-white rounded-xl shadow-md p-6 flex flex-col transition';
+                topicCard.innerHTML = `
+                    <div class="flex-grow">
+                        <h3 class="text-xl font-bold text-slate-800">${topic.data.title}</h3>
+                        ${itemsHtml}
+                    </div>
+                    <div class="mt-4">${voteButtonsHtml}</div>
+                `;
                 board.appendChild(topicCard);
             });
         }
