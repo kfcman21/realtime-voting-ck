@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>실시간 공감 투표</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 font-sans">
+
+    <div class="container max-w-6xl mx-auto p-4 sm:p-6">
+        
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-extrabold text-slate-800">📊 실시간 공감 투표</h1>
+            <p class="text-slate-500 mt-2">여러분의 생각을 투표로 보여주세요!</p>
+        </header>
+
+        <div id="topics-board" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            <p class="text-center text-gray-500 col-span-full">투표를 불러오는 중입니다...</p>
+        </div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+
+    <script>
+        // ▼▼▼▼▼ Firebase 프로젝트 설정 코드를 여기에 붙여넣으세요 ▼▼▼▼▼
+        const firebaseConfig = {
+            apiKey: "AIzaSyBg6oQzlAEUmKgfoc9wzW_WnRGzCD-NgzI",
+            authDomain: "realtime-voting-ck.firebaseapp.com",
+            projectId: "realtime-voting-ck",
+            storageBucket: "realtime-voting-ck.firebasestorage.app",
+            messagingSenderId: "920253088767",
+            appId: "1:920253088767:web:51d64912cd92fc18d05dca",
+            measurementId: "G-KZBYM1TCG5"
+        };
+        // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+        // Firebase 초기화
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const topicsCollection = db.collection('topics');
+
+        // --- 투표 기능 ---
+        function vote(topicId, itemIndex) {
+            const topicRef = topicsCollection.doc(topicId);
+            db.runTransaction(async (transaction) => {
+                const doc = await transaction.get(topicRef);
+                if (!doc.exists) throw "Document does not exist!";
+                
+                const items = doc.data().items;
+                items[itemIndex].votes += 1;
+                transaction.update(topicRef, { items });
+            }).catch(console.error);
+        }
+
+        // --- UI 렌더링 ---
+        function getRankEmoji(rankIndex) {
+            const emojis = ['🥇', '🥈', '🥉'];
+            return emojis[rankIndex] || `<b>${rankIndex + 1}</b>`;
+        }
+
+        function renderTopics(topics = []) {
+            const board = document.getElementById('topics-board');
+            board.innerHTML = ''; // 보드 초기화
+            
+            if (topics.length === 0) {
+                 board.innerHTML = `<p class="text-center text-gray-500 col-span-full">아직 등록된 투표가 없습니다.</p>`;
+                 return;
+            }
+
+            topics.forEach(topic => {
+                const sortedItems = [...topic.data.items].sort((a, b) => b.votes - a.votes);
+                const totalVotes = topic.data.items.reduce((sum, i) => sum + i.votes, 0);
+                
+                let itemsHtml = '<ul class="space-y-3 mt-4">';
+                sortedItems.forEach((item, index) => {
+                    const percentage = totalVotes > 0 ? (item.votes / totalVotes * 100).toFixed(1) : 0;
+                    itemsHtml += `
+                        <li>
+                            <div class="flex items-center justify-between text-sm font-medium text-slate-600 mb-1">
+                                <div class="flex items-center">
+                                    <span class="text-xl w-8 text-center">${getRankEmoji(index)}</span>
+                                    <span>${item.name}</span>
+                                </div>
+                                <span class="font-bold">${item.votes}표 (${percentage}%)</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2.5">
+                                <div class="bg-blue-500 h-2.5 rounded-full" style="width: ${percentage}%"></div>
+                            </div>
+                        </li>
+                    `;
+                });
+                itemsHtml += '</ul>';
+
+                let voteButtonsHtml = '<div class="flex flex-wrap gap-2 mt-5">';
+                topic.data.items.forEach((item, index) => {
+                    const originalIndex = topic.data.items.findIndex(orig => orig.name === item.name);
+                    voteButtonsHtml += `<button onclick="vote('${topic.id}', ${originalIndex})" class="flex-grow bg-slate-700 text-white text-sm font-semibold py-2 px-3 rounded-md hover:bg-slate-800 transition">🗳️ ${item.name}</button>`;
+                });
+                voteButtonsHtml += '</div>';
+
+                const topicCard = document.createElement('div');
+                topicCard.className = 'bg-white rounded-xl shadow-md p-6 flex flex-col transition hover:shadow-lg hover:-translate-y-1';
+                topicCard.innerHTML = `
+                    <div class="flex-grow">
+                        <h3 class="text-xl font-bold text-slate-800">${topic.data.title}</h3>
+                        ${itemsHtml}
+                    </div>
+                    <div class="mt-4">${voteButtonsHtml}</div>
+                `;
+                board.appendChild(topicCard);
+            });
+        }
+
+        // --- 실시간 데이터 감지 ---
+        topicsCollection.orderBy('createdAt', 'desc').onSnapshot(snapshot => {
+            const topics = snapshot.docs.map(doc => ({ id: doc.id, data: doc.data() }));
+            renderTopics(topics);
+        }, console.error);
+    </script>
+</body>
+</html>
